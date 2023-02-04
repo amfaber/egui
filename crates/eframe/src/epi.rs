@@ -8,6 +8,7 @@
 
 #[cfg(target_arch = "wasm32")]
 use std::any::Any;
+use std::cell::Cell;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use crate::native::run::UserEvent;
@@ -651,6 +652,8 @@ pub struct Frame {
     /// Can be used to manage GPU resources for custom rendering with WGPU using [`egui::PaintCallback`]s.
     #[cfg(feature = "wgpu")]
     pub(crate) wgpu_render_state: Option<egui_wgpu::RenderState>,
+
+    pub(crate) pixel_data: Cell<Option<Vec<u8>>>,
 }
 
 impl Frame {
@@ -670,6 +673,28 @@ impl Frame {
     /// A place where you can store custom data in a way that persists when you restart the app.
     pub fn storage(&self) -> Option<&dyn Storage> {
         self.storage.as_deref()
+    }
+
+    /// Request the current frame's pixel data. Needs to be retrieved by calling [`eframe::Frame::frame_pixels`]
+    /// during [`eframe::App::post_rendering`].
+    pub fn request_pixels(&mut self) {
+        self.output.pixels_requested = true;
+    }
+
+    /// Cancel a request made with [`eframe::Frame::request_pixels`].
+    pub fn cancel_request_pixels(&mut self) {
+        self.output.pixels_requested = false;
+    }
+
+    /// During [`eframe::App::post_rendering`], use this to retrieve the pixel data that was requested during
+    /// [`eframe::App::update`] via [`eframe::Frame::request_pixels`]. Currently only implemented with wgpu backend.
+    /// Returns None if
+    ///     Called in [`eframe::App::update`]
+    ///     [`eframe::Frame::request_pixels`] wasn't called on this frame during [`eframe::App::update`]
+    ///     The rendering backend doesn't support this feature (yet). Currently only implemented for the wgpu backend.
+    ///     Retrieving the data was unsuccesful in some way.
+    pub fn frame_pixels(&self) -> Option<Vec<u8>> {
+        self.pixel_data.take()
     }
 
     /// A place where you can store custom data in a way that persists when you restart the app.
@@ -1037,5 +1062,7 @@ pub(crate) mod backend {
         /// Set to some bool to maximize or unmaximize window.
         #[cfg(not(target_arch = "wasm32"))]
         pub maximized: Option<bool>,
+
+        pub pixels_requested: bool,
     }
 }
